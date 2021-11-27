@@ -1,0 +1,14 @@
+[
+    {    
+      "id": 1,
+      "symbol": "LPK",
+      "address": "0x9b71b5511998e0798625b8fa74e86d8192de78c1",
+      "icon": "./assets/images/tokens/LPK.png"
+    },
+    {    
+    "id": 2,
+    "symbol": "LPKX",
+    "address": "0x15b05286eb1756434df34439ae456885462407c6",
+    "icon": "./assets/images/tokens/LPKX.png"
+    }
+]
