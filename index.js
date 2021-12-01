@@ -102,6 +102,27 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
   response.send({ data: address});
 });
 
+app.post('/api/v1/bitquery/coin/info', (request, response) => {
+  client.request(makeQueryCoinInfo(request.body.data.address))
+  .then(res => {
+    response.send({ data: res});
+  }).catch(error => console.error(error))
+});
+
+app.post('/api/v1/bitquery/coin/getbar', (request, response) => {
+  client.request(
+    makeQueryCoinGetBar(
+      request.body.data.address, 
+      request.body.data.from, 
+      request.body.data.to,
+      request.body.data.interval
+    )
+  )
+  .then(res => {
+    response.send({ data: res});
+  }).catch(error => console.error(error))
+});
+
 app.listen(PORT, () => {
   console.log(`LPK SERVER listening on port ${PORT}!`)
 });
@@ -187,65 +208,66 @@ function filterDecimalsOfToken(symbol) {
   }
 }
 
-// app.post('/api/v1/cmc', (request, response) => {
-//   getCmcMap()
-//     .then(data => {
-//       console.log(data)
-//       response.send({ data: data });
-//     });
-// });
+function makeQueryCoinInfo(token, network='bsc') {
+  const query = gql`
+    {
 
-// async function getCmcMap() 
-// {
-//   const CMC_ENDPOINT = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/trending/latest';    
-//   const url = new URL(CMC_ENDPOINT)
-//   var params = {
-//   }
-//   url.search = new URLSearchParams(params).toString();
-  
-//   try {
-//     let response = await fetch(url, {
-//       headers: { 
-//         'Content-Type': 'application/json',
-//         'Access-Control-Allow-Origin': '*',
-//         // 'X-API-KEY': process.env.BITQUERY_API_KEY,
-//         'X-CMC_PRO_API_KEY': "2866aa91-be9d-484a-8fdc-ac9a98db156d"
-      
-//       },
-//     });
-//     console.log('response', response)
-//     if(response.status == 200){
-//       return response.json()
-//     }else if(response.status == 429){
-//       console.log(response.statusText)        
-//     }
-//   } catch (error) {
-//     console.log('LPK SERVER error', error)        
-//   }
-// }
+      ethereum(network: ${network}) {
+        dexTrades(
+          options: {desc: ["block.height", "transaction.index"], limit: 1}
+          exchangeAddress: {is: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"}
+          baseCurrency: {is: "${token}"}
+          quoteCurrency: {is: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"}
+        ) 
+        {
+          block {
+            height
+            timestamp {
+              time(format: "%Y-%m-%d %H:%M:%S") 
+            }
+          }
+          transaction {
+            index
+          }
+          baseCurrency {
+            name
+            symbol
+            decimals
+          },
+          quoteCurrency {
+            name
+            symbol
+            decimals
+          }
+          quotePrice
+        }
+      }
+    }
+    `
+    return query
+}
 
-function makeQueryTokenPair(token, network='bsc') {
+function makeQueryCoinGetBar(token, from, to, interval, network='bsc') {
   const query = gql`
     {
       ethereum(network: ${network}) {
-          dexTrades(
-            baseCurrency: {is: "${token}"}
-            options: {desc: "trades", limit: 10}
-          ) {
-            poolToken: smartContract {
-                address {
-                  address
-                }
-            }
-            exchange {
-                fullName
-            }
-            pair: quoteCurrency {
-                symbol
-                address
-            }
-            trades: count
-            quotePrice
+        dexTrades(
+          options: {asc: "timeInterval.minute"}
+          date: {since: "${from}", till: "${to}"}
+          exchangeAddress: {is: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73"}
+          baseCurrency: {is: "${token}"},
+          quoteCurrency: {is: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"},
+          tradeAmountUsd: {gt: 10}
+        ) 
+        {
+          timeInterval {
+            minute(count: ${interval}, format: "%Y-%m-%dT%H:%M:%SZ")  
+          }
+          volume: quoteAmount
+          high: quotePrice(calculate: maximum)
+          low: quotePrice(calculate: minimum)
+          open: minimum(of: block, get: quote_price)
+          close: maximum(of: block, get: quote_price) 
         }
       }
     }
