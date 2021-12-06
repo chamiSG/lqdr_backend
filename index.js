@@ -119,7 +119,7 @@ app.post('/api/v1/bitquery/coin/getbar', (request, response) => {
     )
   )
   .then(res => {
-    response.send({ data: res});
+    response.send({ data: res });
   }).catch(error => console.error(error))
 });
 
@@ -228,6 +228,9 @@ function makeQueryCoinInfo(token, network='bsc') {
           }
           transaction {
             index
+          }
+          exchange {
+            fullName
           }
           baseCurrency {
             name
