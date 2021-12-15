@@ -54,8 +54,33 @@ const client = new GraphQLClient(BITQUERY_ENDPOINT, {
 
 app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
   const address = []
-  await Promise.all(marketData.map(async (token, i) => {
+  const cakeAddr = '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82';
+  const usdAddr = '0xe9e7cea3dedca5984780bafc599bd69add087d56';
+  const lpkAddr = '0x9b71b5511998e0798625b8fa74e86d8192de78c1';
+  const lpkxAddr = '0x15b05286eb1756434df34439ae456885462407c6';
+  let lpkPrice = 0, lpkxPrice = 0;
 
+  let tokenForCake = 0;
+  let cakeForUSD = 0;
+  let lpkxForlpk = 0;
+  await client.request(makeQueryLatestPrice(lpkAddr, cakeAddr))
+  .then(res => {
+    tokenForCake = res.ethereum.dexTrades[0].quotePrice
+  }).catch(error => console.log(error));
+
+  await client.request(makeQueryLatestPrice(cakeAddr, usdAddr)).then(res => {
+    cakeForUSD = res.ethereum.dexTrades[0].quotePrice
+  }).catch(error => console.log(error))
+
+  lpkPrice = tokenForCake * cakeForUSD;
+
+  await client.request(makeQueryLatestPrice(lpkxAddr, lpkAddr)).then(res => {
+    lpkxForlpk = res.ethereum.dexTrades[0].quotePrice
+  }).catch(error => console.log(error))
+
+  lpkxPrice = lpkxForlpk * lpkPrice;
+
+  await Promise.all(marketData.map(async (token, i) => {
     const pairData = await client.request(makeQueryTokenPairs(token.address))
     const dexTrades = pairData.ethereum.dexTrades
     await Promise.all(dexTrades.map(async (element, j) => {
@@ -67,14 +92,14 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
         
         const obj = {}
         obj.id = "" + i + j
-        obj.pairInputSymbol = input.symbol
+        obj.pairInputSymbol = input.symbol; // === "WBNB" ? "BNB" : input.symbol;
         obj.pairInputAddress = input.address
         obj.pairInputName = filterNameOfToken(input.symbol)
         obj.pairInputDecimals = filterDecimalsOfToken(input.symbol)
         obj.pairInputChainId = filterChainIdOfToken(input.symbol)
         obj.pairInputLogoUrl = filterLogoUrlOfToken(input.symbol)
         
-        obj.pairOutputSymbol = output.symbol
+        obj.pairOutputSymbol = output.symbol; // === "WBNB" ? "BNB" : output.symbol;
         obj.pairOutputAddress = output.address
         obj.pairOutputName = filterNameOfToken(output.symbol)
         obj.pairOutputDecimals = filterDecimalsOfToken(output.symbol)
@@ -83,15 +108,25 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
 
         obj.exchange = element.exchange.fullName
         obj.address = element.poolToken.address.address
+        // const tokenPrice = await getTokenPrice()
 
         const res = await client.request(makeQueryTokenPools(element.poolToken.address.address, token.address, element.pair.address))
         const poolsData = res
         if(poolsData) {
-          const inputPools = poolsData.ethereum.address[0].balances[0].value
-          const outputPools = poolsData.ethereum.address[0].balances[1].value
+          let inputPools, outputPools;          
+          if (poolsData.ethereum.address[0].balances[0].currency.symbol == input.symbol) {
+            inputPools = poolsData.ethereum.address[0].balances[0].value
+            outputPools = poolsData.ethereum.address[0].balances[1].value
+          } else {
+            inputPools = poolsData.ethereum.address[0].balances[1].value
+            outputPools = poolsData.ethereum.address[0].balances[0].value
+          }
           obj.inputPools = inputPools
           obj.outputPools = outputPools
-          obj.totalLiquidity = outputPools * request.body.data.price * 2
+          if (token.symbol == 'LPK')
+            obj.totalLiquidity = outputPools * lpkPrice * 2
+          else
+            obj.totalLiquidity = outputPools * lpkxPrice * 2
         }
         address.push(obj)
       }
@@ -101,11 +136,27 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
   response.send({ data: address});
 });
 
+app.post('/api/v1/bitquery/coin/price', async function(request, response) {
+  const cakeAddr = '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82';
+  const usdAddr = '0xe9e7cea3dedca5984780bafc599bd69add087d56';
+  let tokenForCake = 0;
+  let cakeForUSD = 0;
+  await client.request(makeQueryLatestPrice(request.body.address, cakeAddr))
+  .then(res => {
+    tokenForCake = res.ethereum.dexTrades[0].quotePrice
+  }).catch(error => console.log(error));
+
+  await client.request(makeQueryLatestPrice(cakeAddr, usdAddr)).then(res1 => {
+    cakeForUSD = res1.ethereum.dexTrades[0].quotePrice
+  }).catch(error => console.log(error))
+  response.send({data: tokenForCake * cakeForUSD});
+});
+
 app.post('/api/v1/bitquery/coin/info', (request, response) => {
   client.request(makeQueryCoinInfo(request.body.data.address))
   .then(res => {
     response.send({ data: res});
-  }).catch(error => console.error(error))
+  }).catch(error => console.log(error))
 });
 
 app.post('/api/v1/bitquery/coin/getbar', (request, response) => {
@@ -206,6 +257,7 @@ function filterDecimalsOfToken(symbol) {
     return decimals
   }
 }
+
 
 function makeQueryCoinInfo(token, network='bsc') {
   const query = gql`
@@ -332,39 +384,17 @@ function makeQueryLatestPrice(address0, address1, network = 'bsc') {
   {
     ethereum(network: ${network}) {
       dexTrades(
-        options: {desc: ["block.height", "tradeIndex"], limit: 1}
-        exchangeName: {in: ["Pancake", "Pancake v2"]}
-        baseCurrency: {is: "${address0}"}
-        quoteCurrency: {is: "${address1}"}
-      ) {
-        transaction {
-          hash
+      options: {limit: 1, desc: "block.timestamp.time"},
+      baseCurrency: {is: "${address0}"},
+      quoteCurrency: {is: "${address1}"}) {
+      block {
+        timestamp {
+          time(format: "%Y-%m-%d %H:%M:%S")
         }
-        tradeIndex
-        smartContract {
-          address {
-            address
-          }
-          contractType
-          currency {
-            name
-          }
-        }
-        tradeIndex
-        block {
-          height
-        }
-        baseCurrency {
-          symbol
-          address
-        }
-        quoteCurrency {
-          symbol
-          address
-        }
+      }
         quotePrice
       }
     }
-  }  
+  } 
   `
 }
