@@ -123,10 +123,19 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
           }
           obj.inputPools = inputPools
           obj.outputPools = outputPools
-          if (token.symbol == 'LPK')
-            obj.totalLiquidity = outputPools * lpkPrice * 2
-          else
-            obj.totalLiquidity = outputPools * lpkxPrice * 2
+          if (token.symbol == 'LPK') {
+            if (poolsData.ethereum.address[0].balances[0].currency.symbol == 'LPK') {
+              obj.totalLiquidity =  poolsData.ethereum.address[0].balances[0].value * lpkPrice * 2
+            } else {
+              obj.totalLiquidity =  poolsData.ethereum.address[0].balances[1].value * lpkPrice * 2
+            }
+          } else {
+            if (poolsData.ethereum.address[0].balances[0].currency.symbol == 'LPKX') {
+              obj.totalLiquidity =  poolsData.ethereum.address[0].balances[0].value * lpkxPrice * 2
+            } else {
+              obj.totalLiquidity =  poolsData.ethereum.address[0].balances[1].value * lpkxPrice * 2
+            }
+          }
         }
         address.push(obj)
       }
