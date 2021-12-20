@@ -4,7 +4,6 @@ import path from 'path';
 import bodyParser from 'body-parser';
 import { URL, URLSearchParams } from 'url';
 import fetch from 'node-fetch';
-import got from 'got';
 import cors  from 'cors';
 import dotenv from "dotenv";
 dotenv.config();
@@ -60,7 +59,7 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
     const pairData = await client.request(makeQueryTokenPairs(token.address))
     const dexTrades = pairData.ethereum.dexTrades
     await Promise.all(dexTrades.map(async (element, j) => {
-      if (element.exchange.fullName === 'Pancake v2'){
+      if (element.exchange.fullName === 'Pancake v2' && element.pair.symbol != 'LPKD'){
         console.log('element.pair.symbol', element.pair.symbol)
         const input = (element.pair.symbol == 'Cake' || element.pair.symbol == "WBNB") ? element.pair : token;
         const output = (element.pair.symbol == 'Cake' || element.pair.symbol == "WBNB") ? token : element.pair;
