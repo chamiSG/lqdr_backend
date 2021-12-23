@@ -59,7 +59,7 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
     const pairData = await client.request(makeQueryTokenPairs(token.address))
     const dexTrades = pairData.ethereum.dexTrades
     await Promise.all(dexTrades.map(async (element, j) => {
-      if (element.exchange.fullName === 'Pancake v2' && element.pair.symbol != 'LPKD'){
+      if (element.exchange.fullName === request.body.data.exchangeName && element.pair.symbol != 'LPKD'){
         console.log('element.pair.symbol', element.pair.symbol)
         const input = (element.pair.symbol == 'Cake' || element.pair.symbol == "WBNB") ? element.pair : token;
         const output = (element.pair.symbol == 'Cake' || element.pair.symbol == "WBNB") ? token : element.pair;
@@ -73,7 +73,7 @@ app.post('/api/v1/bitquery/liquidity', async function(request, response, next) {
         obj.pairInputDecimals = filterDecimalsOfToken(input.symbol)
         obj.pairInputChainId = filterChainIdOfToken(input.symbol)
         obj.pairInputLogoUrl = filterLogoUrlOfToken(input.symbol)
-
+        
         obj.pairOutputSymbol = output.symbol
         obj.pairOutputAddress = output.address
         obj.pairOutputName = filterNameOfToken(output.symbol)
@@ -277,13 +277,14 @@ function makeQueryCoinGetBar(token, from, to, interval, network='bsc') {
     return query
 }
 
-function makeQueryTokenPairs(token, network='bsc') {
+function makeQueryTokenPairs(token, network='bsc', exchangeName='Pancake v2') {
   const query = gql`
     {
       ethereum(network: ${network}) {
           dexTrades(
             baseCurrency: {is: "${token}"}
             options: {desc: "trades", limit: 10}
+            exchangeName: {is: "${exchangeName}"}
           ) {
             poolToken: smartContract {
                 address {
